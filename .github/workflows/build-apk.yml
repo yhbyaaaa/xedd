@@ -76,7 +76,18 @@ jobs:
       - name: Build debug APK
         run: |
           cd "$PROJECT_DIR"
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+          # GitHub 在海外，腾讯镜像可能超时，改用 Gradle 官方地址
+          sed -i 's#mirrors.cloud.tencent.com/gradle/#services.gradle.org/distributions/#' gradle/wrapper/gradle-wrapper.properties
+
+          # 海外机器改用 Google / Maven Central 官方仓库
+          sed -i 's#^\( *\)maven("https://maven.aliyun.com#\1// maven("https://maven.aliyun.com#' settings.gradle.kts
+
           chmod +x gradlew
+          ./gradlew --version
           ./gradlew :app:assembleDebug --no-daemon --stacktrace
 
       - name: Upload APK
