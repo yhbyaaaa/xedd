@@ -1,1 +1,68 @@
-[build-apk.yml](.github/workflows/build-apk.yml)
+name: Build Suishouji APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 37 and build tools
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platforms;android-37.0" "build-tools;36.0.0" "platform-tools"
+
+      - name: Locate source code
+        run: |
+          set -e
+          if [ -f "suishouji/settings.gradle.kts" ]; then
+            echo "PROJECT_DIR=$PWD/suishouji" >> "$GITHUB_ENV"
+          elif [ -f "settings.gradle.kts" ]; then
+            echo "PROJECT_DIR=$PWD" >> "$GITHUB_ENV"
+          else
+            mkdir -p source
+            zipfile=$(find . -maxdepth 1 -name '*.zip' | head -n 1)
+            if [ -z "$zipfile" ]; then
+              echo "没有找到源码压缩包，请把 随手记-项目源码-v1.0.0.zip 上传到仓库根目录。"
+              exit 1
+            fi
+            unzip -q "$zipfile" -d source
+            project=$(find source -name settings.gradle.kts -printf '%h\n' | head -n 1)
+            if [ -z "$project" ]; then
+              echo "压缩包里没有找到 settings.gradle.kts。"
+              exit 1
+            fi
+            echo "PROJECT_DIR=$PWD/$project" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build debug APK
+        run: |
+          cd "$PROJECT_DIR"
+          chmod +x gradlew
+          ./gradlew :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: suishouji-debug-apk
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
